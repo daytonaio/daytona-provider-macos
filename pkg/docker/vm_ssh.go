@@ -58,9 +58,10 @@ func (d *DockerClient) WaitForMacOsBoot(containerID string, hostname *string) er
 }
 
 func (d *DockerClient) GetSshClient(hostname *string, containerData types.ContainerJSON) (*ssh.Client, error) {
-	addr := "localhost:10022"
+	port := containerData.NetworkSettings.Ports["22/tcp"][0].HostPort
+	addr := fmt.Sprintf("localhost:%s", port)
 	if hostname != nil {
-		addr = fmt.Sprintf("%s:10022", *hostname)
+		addr = fmt.Sprintf("%s:%s", *hostname, port)
 	}
 
 	config := ssh.ClientConfig{
