@@ -45,12 +45,6 @@ func (d *DockerClient) CreateWorkspace(opts *CreateWorkspaceOptions) error {
 			HostPort: fmt.Sprintf("%d", p),
 		},
 	}
-	portBindings["2222/tcp"] = []nat.PortBinding{
-		{
-			HostIP:   "0.0.0.0",
-			HostPort: "2222",
-		},
-	}
 
 	uiPort := 8006
 	for {
