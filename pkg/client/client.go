@@ -26,7 +26,7 @@ func GetClient(targetOptions types.TargetConfigOptions, sockDir string) (*client
 
 func getLocalClient(targetOptions types.TargetConfigOptions) (*client.Client, error) {
 	schema := "unix://"
-	if runtime.GOOS == "mac" {
+	if runtime.GOOS == "windows" {
 		schema = "npipe://"
 	}
 

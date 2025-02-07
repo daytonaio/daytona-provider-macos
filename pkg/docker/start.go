@@ -40,7 +40,7 @@ func (d *DockerClient) StartWorkspace(opts *CreateWorkspaceOptions, daytonaDownl
 		}
 	}
 
-	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname)
+	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname, c)
 	if err != nil {
 		return err
 	}

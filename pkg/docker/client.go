@@ -91,7 +91,7 @@ func (d *DockerClient) OpenWebUI(hostname *string, containerData types.Container
 	}
 	var err error
 	switch runtime.GOOS {
-	case "mac":
+	case "windows":
 		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Run()
 	case "darwin":
 		err = exec.Command("open", url).Run()
@@ -102,7 +102,7 @@ func (d *DockerClient) OpenWebUI(hostname *string, containerData types.Container
 	}
 
 	if err != nil {
-		logWriter.Write([]byte(fmt.Sprintf("MacOS is started visit %s\n", url)))
+		logWriter.Write([]byte(fmt.Sprintf("MacOS has started. You can see the UI at %s\n", url)))
 	}
 
 }

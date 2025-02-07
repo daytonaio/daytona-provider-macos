@@ -12,7 +12,13 @@ import (
 )
 
 func (d *DockerClient) StopWorkspace(workspace *models.Workspace, logWriter io.Writer) error {
-	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname)
+	containerName := d.GetWorkspaceContainerName(workspace)
+	c, err := d.apiClient.ContainerInspect(context.TODO(), containerName)
+	if err != nil {
+		return err
+	}
+
+	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname, c)
 	if err != nil {
 		return err
 	}
@@ -24,7 +30,7 @@ func (d *DockerClient) StopWorkspace(workspace *models.Workspace, logWriter io.W
 	time.Sleep(time.Second * 2)
 
 	for i := 0; i < 6; i++ {
-		client, err := d.GetSshClient(d.targetOptions.RemoteHostname)
+		client, err := d.GetSshClient(d.targetOptions.RemoteHostname, c)
 		if err != nil {
 			return nil
 		}

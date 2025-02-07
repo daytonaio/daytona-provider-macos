@@ -35,10 +35,14 @@ func (d *DockerClient) CreateWorkspace(opts *CreateWorkspaceOptions) error {
 	mounts := []mount.Mount{}
 	var availablePort *uint16
 	portBindings := make(map[nat.Port][]nat.PortBinding)
+	p, err := ports.GetAvailableEphemeralPort()
+	if err != nil {
+		p = 10022
+	}
 	portBindings["22/tcp"] = []nat.PortBinding{
 		{
 			HostIP:   "0.0.0.0",
-			HostPort: "10022",
+			HostPort: fmt.Sprintf("%d", p),
 		},
 	}
 	portBindings["2222/tcp"] = []nat.PortBinding{
@@ -141,7 +145,7 @@ func (d *DockerClient) CreateWorkspace(opts *CreateWorkspaceOptions) error {
 		return fmt.Errorf("failed to wait for mac to boot: %w", err)
 	}
 
-	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname)
+	sshClient, err := d.GetSshClient(d.targetOptions.RemoteHostname, containerData)
 	if err != nil {
 		return fmt.Errorf("failed to get SSH client: %w", err)
 	}
