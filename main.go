@@ -3,12 +3,11 @@ package main
 import (
 	"os"
 
+	p "github.com/daytonaio/daytona-provider-macos/pkg/provider"
 	"github.com/daytonaio/daytona/pkg/provider"
-	"github.com/daytonaio/daytona/pkg/provider/manager"
+	"github.com/daytonaio/daytona/pkg/runner/providermanager"
 	"github.com/hashicorp/go-hclog"
 	hc_plugin "github.com/hashicorp/go-plugin"
-
-	p "github.com/daytonaio/daytona-provider-sample/pkg/provider"
 )
 
 func main() {
@@ -18,9 +17,9 @@ func main() {
 		JSONFormat: true,
 	})
 	hc_plugin.Serve(&hc_plugin.ServeConfig{
-		HandshakeConfig: manager.ProviderHandshakeConfig,
+		HandshakeConfig: providermanager.ProviderHandshakeConfig,
 		Plugins: map[string]hc_plugin.Plugin{
-			"provider-sample": &provider.ProviderPlugin{Impl: &p.SampleProvider{}},
+			"macos-provider": &provider.ProviderPlugin{Impl: &p.MacProvider{}},
 		},
 		Logger: logger,
 	})

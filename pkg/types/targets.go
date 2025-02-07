@@ -3,43 +3,65 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/daytonaio/daytona/pkg/provider"
+	"github.com/daytonaio/daytona/pkg/models"
 )
 
-type TargetOptions struct {
-	RequiredString string  `json:"Required String"`
-	OptionalString *string `json:"Optional String,omitempty"`
-	OptionalInt    *int    `json:"Optional Int,omitempty"`
-	FilePath       *string `json:"File Path"`
+type TargetConfigOptions struct {
+	RemoteHostname   *string `json:"Remote Hostname,omitempty"`
+	RemotePort       *int    `json:"Remote Port,omitempty"`
+	RemoteUser       *string `json:"Remote User,omitempty"`
+	RemotePassword   *string `json:"Remote Password,omitempty"`
+	RemotePrivateKey *string `json:"Remote Private Key Path,omitempty"`
+	SockPath         *string `json:"Sock Path,omitempty"`
+	TargetDataDir    *string `json:"Target Data Dir,omitempty"`
 }
 
-func GetTargetManifest() *provider.ProviderTargetManifest {
-	return &provider.ProviderTargetManifest{
-		"Required String": provider.ProviderTargetProperty{
-			Type:         provider.ProviderTargetPropertyTypeString,
-			DefaultValue: "default-required-string",
+func GetTargetConfigManifest() *models.TargetConfigManifest {
+	return &models.TargetConfigManifest{
+		"Remote Hostname": models.TargetConfigProperty{
+			Type:              models.TargetConfigPropertyTypeString,
+			DisabledPredicate: "^local-macos$",
 		},
-		"Optional String": provider.ProviderTargetProperty{
-			Type:        provider.ProviderTargetPropertyTypeString,
-			InputMasked: true,
+		"Remote Port": models.TargetConfigProperty{
+			Type:              models.TargetConfigPropertyTypeInt,
+			DefaultValue:      "22",
+			DisabledPredicate: "^local-macos$",
 		},
-		"Optional Int": provider.ProviderTargetProperty{
-			Type: provider.ProviderTargetPropertyTypeInt,
+		"Remote User": models.TargetConfigProperty{
+			Type: models.TargetConfigPropertyTypeString,
+			// TODO: Add docs entry
+			Description:       "Note: non-root user required",
+			DisabledPredicate: "^local-macos$",
 		},
-		"File Path": provider.ProviderTargetProperty{
-			Type:              provider.ProviderTargetPropertyTypeFilePath,
+		"Remote Password": models.TargetConfigProperty{
+			Type:              models.TargetConfigPropertyTypeString,
+			DisabledPredicate: "^local-macos$",
+			InputMasked:       true,
+		},
+		"Remote Private Key Path": models.TargetConfigProperty{
+			Type:              models.TargetConfigPropertyTypeFilePath,
 			DefaultValue:      "~/.ssh",
-			DisabledPredicate: "^default-target$",
+			DisabledPredicate: "^local-macos$",
+		},
+		"Sock Path": models.TargetConfigProperty{
+			Type:         models.TargetConfigPropertyTypeString,
+			DefaultValue: "/var/run/docker.sock",
+		},
+		"Target Data Dir": models.TargetConfigProperty{
+			Type:              models.TargetConfigPropertyTypeString,
+			DefaultValue:      "/tmp/daytona-data",
+			Description:       "The directory on the remote host where the target data will be stored",
+			DisabledPredicate: "^local-macos$",
 		},
 	}
 }
 
-func ParseTargetOptions(optionsJson string) (*TargetOptions, error) {
-	var targetOptions TargetOptions
-	err := json.Unmarshal([]byte(optionsJson), &targetOptions)
+func ParseTargetConfigOptions(optionsJson string) (opts *TargetConfigOptions, isLocal bool, err error) {
+	var targetOptions TargetConfigOptions
+	err = json.Unmarshal([]byte(optionsJson), &targetOptions)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
-	return &targetOptions, nil
+	return &targetOptions, targetOptions.RemoteHostname == nil, nil
 }

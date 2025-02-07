@@ -1,188 +1,306 @@
 package provider
 
 import (
-	"encoding/json"
+	"context"
+	"errors"
+	"fmt"
 	"io"
+	"os"
+	"path"
+	"runtime"
 
-	internal "github.com/daytonaio/daytona-provider-sample/internal"
-	log_writers "github.com/daytonaio/daytona-provider-sample/internal/log"
-	provider_types "github.com/daytonaio/daytona-provider-sample/pkg/types"
+	internal "github.com/daytonaio/daytona-provider-macos/internal"
+	log_writers "github.com/daytonaio/daytona-provider-macos/internal/log"
+	"github.com/daytonaio/daytona-provider-macos/pkg/client"
+	"github.com/daytonaio/daytona-provider-macos/pkg/types"
 
+	"github.com/daytonaio/daytona-provider-macos/pkg/docker"
 	"github.com/daytonaio/daytona/pkg/logs"
+	"github.com/daytonaio/daytona/pkg/models"
 	"github.com/daytonaio/daytona/pkg/provider"
-	"github.com/daytonaio/daytona/pkg/provider/util"
-	"github.com/daytonaio/daytona/pkg/workspace"
-	"github.com/daytonaio/daytona/pkg/workspace/project"
+	provider_util "github.com/daytonaio/daytona/pkg/provider/util"
+	"github.com/daytonaio/daytona/pkg/ssh"
+	docker_sdk "github.com/docker/docker/client"
 )
 
-type SampleProvider struct {
+type MacProvider struct {
 	BasePath           *string
 	DaytonaDownloadUrl *string
 	DaytonaVersion     *string
 	ServerUrl          *string
 	ApiUrl             *string
-	LogsDir            *string
+	ApiKey             *string
+	TargetLogsDir      *string
+	WorkspaceLogsDir   *string
 	ApiPort            *uint32
 	ServerPort         *uint32
-	NetworkKey         *string
-	OwnProperty        string
+	RemoteSockDir      string
 }
 
-func (p *SampleProvider) Initialize(req provider.InitializeProviderRequest) (*util.Empty, error) {
-	p.OwnProperty = "my-own-property"
+func (p *MacProvider) Initialize(req provider.InitializeProviderRequest) (*provider_util.Empty, error) {
+	tmpDir := "/tmp"
+	if runtime.GOOS == "mac" {
+		tmpDir = os.TempDir()
+		if tmpDir == "" {
+			return new(provider_util.Empty), errors.New("could not determine temp dir")
+		}
+	}
+
+	p.RemoteSockDir = path.Join(tmpDir, "target-socks")
+
+	// Clear old sockets
+	err := os.RemoveAll(p.RemoteSockDir)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+	err = os.MkdirAll(p.RemoteSockDir, 0755)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
 
 	p.BasePath = &req.BasePath
 	p.DaytonaDownloadUrl = &req.DaytonaDownloadUrl
 	p.DaytonaVersion = &req.DaytonaVersion
 	p.ServerUrl = &req.ServerUrl
 	p.ApiUrl = &req.ApiUrl
-	p.LogsDir = &req.LogsDir
+	p.ApiKey = req.ApiKey
+	p.TargetLogsDir = &req.TargetLogsDir
+	p.WorkspaceLogsDir = &req.WorkspaceLogsDir
 	p.ApiPort = &req.ApiPort
 	p.ServerPort = &req.ServerPort
-	p.NetworkKey = &req.NetworkKey
 
-	return new(util.Empty), nil
+	return new(provider_util.Empty), nil
 }
 
-func (p SampleProvider) GetInfo() (provider.ProviderInfo, error) {
-	return provider.ProviderInfo{
-		Name:    "provider-sample",
-		Version: internal.Version,
+func (p MacProvider) GetInfo() (models.ProviderInfo, error) {
+	label := "MacOS"
+
+	return models.ProviderInfo{
+		Name:                 "macos-provider",
+		Label:                &label,
+		AgentlessTarget:      false,
+		Version:              internal.Version,
+		TargetConfigManifest: *types.GetTargetConfigManifest(),
 	}, nil
 }
 
-func (p SampleProvider) CheckRequirements() (*[]provider.RequirementStatus, error) {
-	return new([]provider.RequirementStatus), nil
-}
-
-func (p SampleProvider) GetTargetManifest() (*provider.ProviderTargetManifest, error) {
-	return provider_types.GetTargetManifest(), nil
-}
-
-func (p SampleProvider) GetPresetTargets() (*[]provider.ProviderTarget, error) {
-	info, err := p.GetInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	defaultTargets := []provider.ProviderTarget{
+func (p MacProvider) GetPresetTargetConfigs() (*[]provider.TargetConfig, error) {
+	return &[]provider.TargetConfig{
 		{
-			Name:         "default-target",
-			ProviderInfo: info,
-			Options:      "{\n\t\"Required String\": \"default-required-string\"\n}",
+			Name:    "local",
+			Options: "{\n\t\"Sock Path\": \"/var/run/docker.sock\"\n}",
 		},
-	}
-	return &defaultTargets, nil
+	}, nil
 }
 
-func (p SampleProvider) CreateWorkspace(workspaceReq *provider.WorkspaceRequest) (*util.Empty, error) {
-	logWriter := io.MultiWriter(&log_writers.InfoLogWriter{})
-	if p.LogsDir != nil {
-		loggerFactory := logs.NewLoggerFactory(p.LogsDir, nil)
-		wsLogWriter := loggerFactory.CreateWorkspaceLogger(workspaceReq.Workspace.Id, logs.LogSourceProvider)
-		logWriter = io.MultiWriter(&log_writers.InfoLogWriter{}, wsLogWriter)
-		defer wsLogWriter.Close()
-	}
-
-	logWriter.Write([]byte("Workspace created\n"))
-
-	return new(util.Empty), nil
+func (p MacProvider) StartTarget(targetReq *provider.TargetRequest) (*provider_util.Empty, error) {
+	return new(provider_util.Empty), nil
 }
 
-func (p SampleProvider) StartWorkspace(workspaceReq *provider.WorkspaceRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
+func (p MacProvider) StopTarget(targetReq *provider.TargetRequest) (*provider_util.Empty, error) {
+	return new(provider_util.Empty), nil
 }
 
-func (p SampleProvider) StopWorkspace(workspaceReq *provider.WorkspaceRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
+func (p MacProvider) DestroyTarget(targetReq *provider.TargetRequest) (*provider_util.Empty, error) {
+	return new(provider_util.Empty), nil
 }
 
-func (p SampleProvider) DestroyWorkspace(workspaceReq *provider.WorkspaceRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
-}
-
-func (p SampleProvider) GetWorkspaceInfo(workspaceReq *provider.WorkspaceRequest) (*workspace.WorkspaceInfo, error) {
-	providerMetadata, err := p.getWorkspaceMetadata(workspaceReq)
+func (p MacProvider) DestroyWorkspace(workspaceReq *provider.WorkspaceRequest) (*provider_util.Empty, error) {
+	dockerClient, err := p.getClient(workspaceReq.Workspace.Target.TargetConfig.Options)
 	if err != nil {
-		return nil, err
+		return new(provider_util.Empty), err
 	}
 
-	workspaceInfo := &workspace.WorkspaceInfo{
-		Name:             workspaceReq.Workspace.Name,
-		ProviderMetadata: providerMetadata,
-	}
-
-	projectInfos := []*project.ProjectInfo{}
-	for _, project := range workspaceReq.Workspace.Projects {
-		projectInfo, err := p.GetProjectInfo(&provider.ProjectRequest{
-			TargetOptions: workspaceReq.TargetOptions,
-			Project:       project,
-		})
-		if err != nil {
-			return nil, err
-		}
-		projectInfos = append(projectInfos, projectInfo)
-	}
-	workspaceInfo.Projects = projectInfos
-
-	return workspaceInfo, nil
-}
-
-func (p SampleProvider) CreateProject(projectReq *provider.ProjectRequest) (*util.Empty, error) {
-	logWriter := io.MultiWriter(&log_writers.InfoLogWriter{})
-	if p.LogsDir != nil {
-		loggerFactory := logs.NewLoggerFactory(p.LogsDir, nil)
-		projectLogWriter := loggerFactory.CreateProjectLogger(projectReq.Project.WorkspaceId, projectReq.Project.Name, logs.LogSourceProvider)
-		logWriter = io.MultiWriter(&log_writers.InfoLogWriter{}, projectLogWriter)
-		defer projectLogWriter.Close()
-	}
-
-	logWriter.Write([]byte("Project created\n"))
-
-	return new(util.Empty), nil
-}
-
-func (p SampleProvider) StartProject(projectReq *provider.ProjectRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
-}
-
-func (p SampleProvider) StopProject(projectReq *provider.ProjectRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
-}
-
-func (p SampleProvider) DestroyProject(projectReq *provider.ProjectRequest) (*util.Empty, error) {
-	return new(util.Empty), nil
-}
-
-func (p SampleProvider) GetProjectInfo(projectReq *provider.ProjectRequest) (*project.ProjectInfo, error) {
-	providerMetadata := provider_types.ProjectMetadata{
-		Property: projectReq.Project.Name,
-	}
-
-	metadataString, err := json.Marshal(providerMetadata)
+	workspaceDir, err := p.getWorkspaceDir(workspaceReq)
 	if err != nil {
-		return nil, err
+		return new(provider_util.Empty), err
 	}
 
-	projectInfo := &project.ProjectInfo{
-		Name:             projectReq.Project.Name,
-		IsRunning:        true,
-		Created:          "Created at ...",
-		ProviderMetadata: string(metadataString),
+	sshClient, err := p.getSshClient(workspaceReq.Workspace.Target.TargetConfig.Options)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+	if sshClient != nil {
+		defer sshClient.Close()
 	}
 
-	return projectInfo, nil
+	err = dockerClient.DestroyWorkspace(workspaceReq.Workspace, workspaceDir, sshClient)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	return new(provider_util.Empty), nil
 }
 
-func (p SampleProvider) getWorkspaceMetadata(workspaceReq *provider.WorkspaceRequest) (string, error) {
-	metadata := provider_types.WorkspaceMetadata{
-		Property: workspaceReq.Workspace.Id,
-	}
-
-	jsonContent, err := json.Marshal(metadata)
+func (p MacProvider) GetTargetProviderMetadata(targetReq *provider.TargetRequest) (string, error) {
+	dockerClient, err := p.getClient(targetReq.Target.TargetConfig.Options)
 	if err != nil {
 		return "", err
 	}
 
-	return string(jsonContent), nil
+	return dockerClient.GetTargetProviderMetadata(targetReq.Target)
+}
+
+func (p MacProvider) StartWorkspace(workspaceReq *provider.WorkspaceRequest) (*provider_util.Empty, error) {
+	dockerClient, err := p.getClient(workspaceReq.Workspace.Target.TargetConfig.Options)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	logWriter := io.MultiWriter(&log_writers.InfoLogWriter{})
+	if p.WorkspaceLogsDir != nil {
+		loggerFactory := logs.NewLoggerFactory(logs.LoggerFactoryConfig{
+			LogsDir:     *p.WorkspaceLogsDir,
+			ApiUrl:      p.ApiUrl,
+			ApiKey:      p.ApiKey,
+			ApiBasePath: &logs.ApiBasePathWorkspace,
+		})
+		workspaceLogWriter, err := loggerFactory.CreateLogger(workspaceReq.Workspace.Id, workspaceReq.Workspace.Name, logs.LogSourceProvider)
+		if err != nil {
+			return new(provider_util.Empty), err
+		}
+		logWriter = io.MultiWriter(&log_writers.InfoLogWriter{}, workspaceLogWriter)
+		defer workspaceLogWriter.Close()
+	}
+
+	workspaceDir, err := p.getWorkspaceDir(workspaceReq)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	err = dockerClient.StartWorkspace(&docker.CreateWorkspaceOptions{
+		Workspace:           workspaceReq.Workspace,
+		WorkspaceDir:        workspaceDir,
+		ContainerRegistries: workspaceReq.ContainerRegistries,
+		BuilderImage:        workspaceReq.BuilderImage,
+		LogWriter:           logWriter,
+		Gpc:                 workspaceReq.GitProviderConfig,
+		SshClient:           nil,
+	}, "")
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	return new(provider_util.Empty), nil
+}
+
+func (p MacProvider) StopWorkspace(workspaceReq *provider.WorkspaceRequest) (*provider_util.Empty, error) {
+	dockerClient, err := p.getClient(workspaceReq.Workspace.Target.TargetConfig.Options)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	logWriter := io.MultiWriter(&log_writers.InfoLogWriter{})
+	if p.WorkspaceLogsDir != nil {
+		loggerFactory := logs.NewLoggerFactory(logs.LoggerFactoryConfig{
+			LogsDir:     *p.WorkspaceLogsDir,
+			ApiUrl:      p.ApiUrl,
+			ApiKey:      p.ApiKey,
+			ApiBasePath: &logs.ApiBasePathWorkspace,
+		})
+		workspaceLogWriter, err := loggerFactory.CreateLogger(workspaceReq.Workspace.Id, workspaceReq.Workspace.Name, logs.LogSourceProvider)
+		if err != nil {
+			return new(provider_util.Empty), err
+		}
+		logWriter = io.MultiWriter(&log_writers.InfoLogWriter{}, workspaceLogWriter)
+		defer workspaceLogWriter.Close()
+	}
+
+	err = dockerClient.StopWorkspace(workspaceReq.Workspace, logWriter)
+	if err != nil {
+		return new(provider_util.Empty), err
+	}
+
+	return new(provider_util.Empty), nil
+}
+
+func (p MacProvider) GetWorkspaceProviderMetadata(workspaceReq *provider.WorkspaceRequest) (string, error) {
+	dockerClient, err := p.getClient(workspaceReq.Workspace.Target.TargetConfig.Options)
+	if err != nil {
+		return "", err
+	}
+
+	return dockerClient.GetWorkspaceProviderMetadata(workspaceReq.Workspace)
+}
+
+func (p MacProvider) getClient(targetOptionsJson string) (docker.IDockerClient, error) {
+	targetOptions, _, err := types.ParseTargetConfigOptions(targetOptionsJson)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := client.GetClient(*targetOptions, p.RemoteSockDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return docker.NewDockerClient(docker.DockerClientConfig{
+		ApiClient:     client,
+		TargetOptions: *targetOptions,
+	}), nil
+}
+
+func (p MacProvider) CheckRequirements() (*[]provider.RequirementStatus, error) {
+	var results []provider.RequirementStatus
+	ctx := context.Background()
+
+	cli, err := docker_sdk.NewClientWithOpts(docker_sdk.FromEnv, docker_sdk.WithAPIVersionNegotiation())
+	if err != nil {
+		results = append(results, provider.RequirementStatus{
+			Name:   "Docker installed",
+			Met:    false,
+			Reason: "Docker is not installed",
+		})
+		return &results, nil
+	} else {
+		results = append(results, provider.RequirementStatus{
+			Name:   "Docker installed",
+			Met:    true,
+			Reason: "Docker is installed",
+		})
+	}
+
+	// Check if Docker is running by fetching Docker info
+	_, err = cli.Info(ctx)
+	if err != nil {
+		results = append(results, provider.RequirementStatus{
+			Name:   "Docker running",
+			Met:    false,
+			Reason: "Docker is not running. Error: " + err.Error(),
+		})
+	} else {
+		results = append(results, provider.RequirementStatus{
+			Name:   "Docker running",
+			Met:    true,
+			Reason: "Docker is running",
+		})
+	}
+	return &results, nil
+}
+
+func (p *MacProvider) getWorkspaceDir(workspaceReq *provider.WorkspaceRequest) (string, error) {
+	return fmt.Sprintf("/Users/daytona/Desktop/%s/%s", workspaceReq.Workspace.Target.Name, workspaceReq.Workspace.Name), nil
+}
+
+func (p *MacProvider) getTargetDir(targetReq *provider.TargetRequest) (string, error) {
+	return fmt.Sprintf("/Users/daytona/Desktop/%s", targetReq.Target.Name), nil
+}
+
+func (p *MacProvider) getSshClient(targetOptionsJson string) (*ssh.Client, error) {
+	targetOptions, isLocal, err := types.ParseTargetConfigOptions(targetOptionsJson)
+	if err != nil {
+		return nil, err
+	}
+
+	if isLocal {
+		return nil, nil
+	}
+
+	return ssh.NewClient(&ssh.SessionConfig{
+		Hostname:       *targetOptions.RemoteHostname,
+		Port:           *targetOptions.RemotePort,
+		Username:       *targetOptions.RemoteUser,
+		Password:       targetOptions.RemotePassword,
+		PrivateKeyPath: targetOptions.RemotePrivateKey,
+	})
 }
